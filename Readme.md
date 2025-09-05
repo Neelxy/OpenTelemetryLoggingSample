@@ -22,8 +22,7 @@ A comprehensive .NET application demonstrating OpenTelemetry logging with struct
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/Neelxy/My-Repository.git
-   cd My-Repository
+   Clone this repository
    ```
 
 2. **Restore dependencies**
@@ -96,7 +95,3 @@ To view these logs in a dashboard:
 1. Set up an OpenTelemetry Collector at `localhost:4318`
 2. Configure it to forward logs to Loki, Elasticsearch, or your preferred backend
 3. Create dashboards in Grafana or your visualization tool
-
-## 📄 License
-
-MIT License - see [LICENSE](LICENSE) for details.
