@@ -93,9 +93,9 @@ namespace OpenTelemetryLoggingSample
 
     public static class Telemetry
     {
-        public const string ActivitySourceName = "OpenTelemetryTracingSample";
-        public const string WeatherActivitySourceName = "OpenTelemetryTracingSample.Weather";
-        public const string OrderActivitySourceName = "OpenTelemetryTracingSample.Order";
+        public const string ActivitySourceName = "OpenTelemetryLoggingSample.Tracing";
+        public const string WeatherActivitySourceName = "OpenTelemetryLoggingSample.Tracing.Weather";
+        public const string OrderActivitySourceName = "OpenTelemetryLoggingSample.Tracing.Order";
 
         public static readonly ActivitySource AppActivitySource = new(ActivitySourceName);
         public static readonly ActivitySource WeatherActivitySource = new(WeatherActivitySourceName);
@@ -306,7 +306,7 @@ namespace OpenTelemetryLoggingSample
             using var scope = _logger.BeginScope("Order_{OrderId}", order.Id);
             using var activity = Telemetry.OrderActivitySource.StartActivity("OrderProcessing", ActivityKind.Internal);
 
-            activity?.SetTag("order.id", order.Id);
+            activity?.SetTag("order.id", order.Id.ToString());
             activity?.SetTag("order.customer", order.CustomerName);
             activity?.SetTag("order.amount", order.Amount);
             activity?.SetTag("order.item_count", order.Items?.Length ?? 0);
@@ -348,7 +348,7 @@ namespace OpenTelemetryLoggingSample
         private async Task ValidateOrderAsync(Order order)
         {
             using var validationActivity = Telemetry.OrderActivitySource.StartActivity("ValidateOrder", ActivityKind.Internal);
-            validationActivity?.SetTag("order.id", order.Id);
+            validationActivity?.SetTag("order.id", order.Id.ToString());
 
             await Task.Delay(Random.Shared.Next(50, 150));
 
@@ -364,7 +364,7 @@ namespace OpenTelemetryLoggingSample
         private async Task ProcessPaymentAsync(Order order)
         {
             using var paymentActivity = Telemetry.OrderActivitySource.StartActivity("ProcessPayment", ActivityKind.Internal);
-            paymentActivity?.SetTag("order.id", order.Id);
+            paymentActivity?.SetTag("order.id", order.Id.ToString());
             paymentActivity?.SetTag("payment.amount", order.Amount);
 
             await Task.Delay(Random.Shared.Next(200, 800));
@@ -385,7 +385,7 @@ namespace OpenTelemetryLoggingSample
         private async Task UpdateInventoryAsync(Order order)
         {
             using var inventoryActivity = Telemetry.OrderActivitySource.StartActivity("UpdateInventory", ActivityKind.Internal);
-            inventoryActivity?.SetTag("order.id", order.Id);
+            inventoryActivity?.SetTag("order.id", order.Id.ToString());
             inventoryActivity?.SetTag("inventory.item_count", order.Items?.Length ?? 0);
 
             if (order.Items != null)

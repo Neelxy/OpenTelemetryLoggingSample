@@ -60,7 +60,7 @@ Update `appsettings.json`:
 
 ### Adjust Trace Frequency
 
-Modify the delay in `/home/runner/work/OpenTelemetryLoggingSample/OpenTelemetryLoggingSample/Program.cs` inside `TracingBackgroundService.ExecuteAsync()`.
+Modify the delay in the `TracingBackgroundService.ExecuteAsync()` method in `Program.cs`.
 
 ## 📦 Dependencies
 
