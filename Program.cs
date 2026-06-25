@@ -96,10 +96,6 @@ namespace OpenTelemetryLoggingSample
         public const string ActivitySourceName = "OpenTelemetryLoggingSample.Tracing";
         public const string WeatherActivitySourceName = "OpenTelemetryLoggingSample.Tracing.Weather";
         public const string OrderActivitySourceName = "OpenTelemetryLoggingSample.Tracing.Order";
-
-        public static readonly ActivitySource AppActivitySource = new(ActivitySourceName);
-        public static readonly ActivitySource WeatherActivitySource = new(WeatherActivitySourceName);
-        public static readonly ActivitySource OrderActivitySource = new(OrderActivitySourceName);
     }
 
     public class TracingBackgroundService : BackgroundService
@@ -107,6 +103,7 @@ namespace OpenTelemetryLoggingSample
         private readonly ILogger<TracingBackgroundService> _logger;
         private readonly WeatherService _weatherService;
         private readonly OrderService _orderService;
+        private readonly ActivitySource _activitySource = new(Telemetry.ActivitySourceName);
 
         public TracingBackgroundService(
             ILogger<TracingBackgroundService> logger,
@@ -135,7 +132,7 @@ namespace OpenTelemetryLoggingSample
                 {
                     cycleCount++;
 
-                    using var cycleActivity = Telemetry.AppActivitySource.StartActivity("TraceCycle", ActivityKind.Internal);
+                    using var cycleActivity = _activitySource.StartActivity("TraceCycle", ActivityKind.Internal);
                     cycleActivity?.SetTag("demo.cycle.number", cycleCount);
                     cycleActivity?.SetTag("deployment.environment", "development");
                     cycleActivity?.AddEvent(new ActivityEvent("cycle.started"));
@@ -183,7 +180,7 @@ namespace OpenTelemetryLoggingSample
 
         private Task RecordSystemHealthAsync()
         {
-            using var healthActivity = Telemetry.AppActivitySource.StartActivity("SystemHealthCheck", ActivityKind.Internal);
+            using var healthActivity = _activitySource.StartActivity("SystemHealthCheck", ActivityKind.Internal);
 
             var cpuUsage = Random.Shared.Next(10, 90);
             var memoryUsage = Random.Shared.Next(512, 2048);
@@ -202,7 +199,7 @@ namespace OpenTelemetryLoggingSample
 
         private Task RecordBusinessEventAsync()
         {
-            using var businessActivity = Telemetry.AppActivitySource.StartActivity("BusinessTransaction", ActivityKind.Internal);
+            using var businessActivity = _activitySource.StartActivity("BusinessTransaction", ActivityKind.Internal);
 
             var saleValue = Random.Shared.Next(100, 1000);
 
@@ -214,15 +211,22 @@ namespace OpenTelemetryLoggingSample
             businessActivity?.SetStatus(ActivityStatusCode.Ok);
 
             _logger.LogInformation("📈 Business transaction span created - Value: {Value}, Currency: {Currency}, Region: {Region}",
-                saleValue, "USD", "US-EAST");
+                saleValue, "USD", "us-east-1");
 
             return Task.CompletedTask;
         }
+
+        public override void Dispose()
+        {
+            _activitySource.Dispose();
+            base.Dispose();
+        }
     }
 
-    public class WeatherService
+    public class WeatherService : IDisposable
     {
         private readonly ILogger<WeatherService> _logger;
+        private readonly ActivitySource _activitySource = new(Telemetry.WeatherActivitySourceName);
         private static readonly string[] Summaries = new[]
         {
             "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
@@ -238,7 +242,7 @@ namespace OpenTelemetryLoggingSample
             var stopwatch = Stopwatch.StartNew();
             var requestId = Guid.NewGuid();
 
-            using var activity = Telemetry.WeatherActivitySource.StartActivity("WeatherRequest", ActivityKind.Client);
+            using var activity = _activitySource.StartActivity("WeatherRequest", ActivityKind.Client);
             activity?.SetTag("weather.city", city);
             activity?.SetTag("request.id", requestId.ToString());
             activity?.SetTag("server.address", "weather-api.local");
@@ -290,11 +294,17 @@ namespace OpenTelemetryLoggingSample
                 throw;
             }
         }
+
+        public void Dispose()
+        {
+            _activitySource.Dispose();
+        }
     }
 
-    public class OrderService
+    public class OrderService : IDisposable
     {
         private readonly ILogger<OrderService> _logger;
+        private readonly ActivitySource _activitySource = new(Telemetry.OrderActivitySourceName);
 
         public OrderService(ILogger<OrderService> logger)
         {
@@ -304,11 +314,11 @@ namespace OpenTelemetryLoggingSample
         public async Task ProcessOrderAsync(Order order)
         {
             using var scope = _logger.BeginScope("Order_{OrderId}", order.Id);
-            using var activity = Telemetry.OrderActivitySource.StartActivity("OrderProcessing", ActivityKind.Internal);
+            using var activity = _activitySource.StartActivity("OrderProcessing", ActivityKind.Internal);
 
             activity?.SetTag("order.id", order.Id.ToString());
             activity?.SetTag("order.customer", order.CustomerName);
-            activity?.SetTag("order.amount", order.Amount);
+            activity?.SetTag("order.amount", order.Amount.ToString("F2"));
             activity?.SetTag("order.item_count", order.Items?.Length ?? 0);
             activity?.AddEvent(new ActivityEvent("order.started"));
 
@@ -347,7 +357,7 @@ namespace OpenTelemetryLoggingSample
 
         private async Task ValidateOrderAsync(Order order)
         {
-            using var validationActivity = Telemetry.OrderActivitySource.StartActivity("ValidateOrder", ActivityKind.Internal);
+            using var validationActivity = _activitySource.StartActivity("ValidateOrder", ActivityKind.Internal);
             validationActivity?.SetTag("order.id", order.Id.ToString());
 
             await Task.Delay(Random.Shared.Next(50, 150));
@@ -363,9 +373,9 @@ namespace OpenTelemetryLoggingSample
 
         private async Task ProcessPaymentAsync(Order order)
         {
-            using var paymentActivity = Telemetry.OrderActivitySource.StartActivity("ProcessPayment", ActivityKind.Internal);
+            using var paymentActivity = _activitySource.StartActivity("ProcessPayment", ActivityKind.Internal);
             paymentActivity?.SetTag("order.id", order.Id.ToString());
-            paymentActivity?.SetTag("payment.amount", order.Amount);
+            paymentActivity?.SetTag("payment.amount", order.Amount.ToString("F2"));
 
             await Task.Delay(Random.Shared.Next(200, 800));
 
@@ -384,7 +394,7 @@ namespace OpenTelemetryLoggingSample
 
         private async Task UpdateInventoryAsync(Order order)
         {
-            using var inventoryActivity = Telemetry.OrderActivitySource.StartActivity("UpdateInventory", ActivityKind.Internal);
+            using var inventoryActivity = _activitySource.StartActivity("UpdateInventory", ActivityKind.Internal);
             inventoryActivity?.SetTag("order.id", order.Id.ToString());
             inventoryActivity?.SetTag("inventory.item_count", order.Items?.Length ?? 0);
 
@@ -399,6 +409,11 @@ namespace OpenTelemetryLoggingSample
             }
 
             inventoryActivity?.SetStatus(ActivityStatusCode.Ok);
+        }
+
+        public void Dispose()
+        {
+            _activitySource.Dispose();
         }
     }
 
