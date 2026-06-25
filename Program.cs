@@ -26,35 +26,39 @@ namespace OpenTelemetryLoggingSample
                 })
                 .ConfigureLogging((context, logging) =>
                 {
+                    var openTelemetrySection = context.Configuration.GetSection("OpenTelemetry");
+                    var serviceName = openTelemetrySection["ServiceName"] ?? "OpenTelemetryLoggingSample";
+                    var serviceVersion = openTelemetrySection["ServiceVersion"] ?? "1.0.0";
+                    var otlpEndpoint = openTelemetrySection.GetSection("Otlp")["Endpoint"] ?? "http://localhost:4318/v1/logs";
+
                     logging.ClearProviders();
                     logging.AddOpenTelemetry(options =>
                     {
                         options.SetResourceBuilder(ResourceBuilder.CreateDefault()
                             .AddService(
-                                serviceName: "OpenTelemetryLoggingSample",
-                                serviceVersion: "1.0.0",
+                                serviceName: serviceName,
+                                serviceVersion: serviceVersion,
                                 serviceInstanceId: Environment.MachineName)
                             .AddAttributes(new Dictionary<string, object>
                             {
                                 ["service.namespace"] = "demo",
                                 ["deployment.environment"] = "development",
-                                ["deployment.environment.name"] = "development",
                                 ["host.name"] = Environment.MachineName,
                                 ["host.type"] = "vm",
                                 ["host.arch"] = Environment.Is64BitOperatingSystem ? "amd64" : "x86",
                                 ["process.pid"] = Environment.ProcessId,
-                                ["process.executable.name"] = "OpenTelemetryLoggingSample",
+                                ["process.executable.name"] = serviceName,
                                 ["process.runtime.name"] = ".NET",
                                 ["process.runtime.version"] = Environment.Version.ToString(),
                                 ["os.type"] = Environment.OSVersion.Platform.ToString().ToLower(),
                                 ["os.description"] = Environment.OSVersion.ToString(),
-                                ["application.name"] = "OpenTelemetryLoggingSample",
+                                ["application.name"] = serviceName,
                                 ["team"] = "development",
                                 ["region"] = "local"
                             }));
                         options.AddOtlpExporter(otlpOptions =>
                         {
-                            otlpOptions.Endpoint = new Uri("http://localhost:4318/v1/logs");
+                            otlpOptions.Endpoint = new Uri(otlpEndpoint);
                             otlpOptions.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
                             otlpOptions.TimeoutMilliseconds = 10000;
                         });
@@ -134,7 +138,7 @@ namespace OpenTelemetryLoggingSample
                     var randomCity = cities[Random.Shared.Next(cities.Length)];
                     await _weatherService.GetWeatherAsync(randomCity);
 
-                    using (_logger.BeginScope("OrderProcessing_{CycleNumber}_{Timestamp}", cycleCount, DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")))
+                    using (_logger.BeginScope($"OrderProcessing_{cycleCount}_{DateTime.UtcNow:yyyyMMdd_HHmmss}"))
                     {
                         var order = new Order
                         {
@@ -242,6 +246,8 @@ namespace OpenTelemetryLoggingSample
                     Timestamp = DateTime.UtcNow
                 };
                 stopwatch.Stop();
+                activity?.SetTag("weather.temperature", weather.Temperature);
+                activity?.SetTag("weather.condition", weather.Summary);
                 _logger.LogInformation(
                     "✅ Weather data retrieved - City: {City}, Temperature: {Temperature}, Condition: {WeatherCondition}, Duration: {DurationMs}ms, RequestId: {RequestId}",
                     weather.City,
@@ -249,8 +255,6 @@ namespace OpenTelemetryLoggingSample
                     weather.Summary,
                     stopwatch.ElapsedMilliseconds,
                     requestId);
-                activity?.SetTag("weather.temperature", weather.Temperature);
-                activity?.SetTag("weather.condition", weather.Summary);
                 return weather;
             }
             catch (Exception ex)
@@ -301,10 +305,9 @@ namespace OpenTelemetryLoggingSample
                 await ProcessPaymentAsync(order);
                 await UpdateInventoryAsync(order);
 
+                activity?.SetTag("order.status", "completed");
                 _logger.LogInformation("✅ Order completed successfully - OrderId: {OrderId}, Customer: {CustomerName}, Amount: {Amount}",
                     order.Id, order.CustomerName, order.Amount);
-
-                activity?.SetTag("order.status", "completed");
             }
             catch (Exception ex)
             {
