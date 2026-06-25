@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("OpenTelemetryLoggingSample")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b1bc9b8965210999ce4e71c2f807681805a050db")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+06882ca360d35015ef3a52d61cfdd1d23775e383")]
 [assembly: System.Reflection.AssemblyProductAttribute("OpenTelemetryLoggingSample")]
 [assembly: System.Reflection.AssemblyTitleAttribute("OpenTelemetryLoggingSample")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

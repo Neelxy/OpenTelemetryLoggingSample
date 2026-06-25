@@ -103,7 +103,7 @@ namespace OpenTelemetryTracingSample
         private readonly ILogger<TracingBackgroundService> _logger;
         private readonly WeatherService _weatherService;
         private readonly OrderService _orderService;
-        private readonly ActivitySource _activitySource = new(Telemetry.ActivitySourceName);
+        private readonly ActivitySource _activitySource;
 
         public TracingBackgroundService(
             ILogger<TracingBackgroundService> logger,
@@ -113,6 +113,7 @@ namespace OpenTelemetryTracingSample
             _logger = logger;
             _weatherService = weatherService;
             _orderService = orderService;
+            _activitySource = new ActivitySource(Telemetry.ActivitySourceName);
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -226,7 +227,7 @@ namespace OpenTelemetryTracingSample
     public class WeatherService : IDisposable
     {
         private readonly ILogger<WeatherService> _logger;
-        private readonly ActivitySource _activitySource = new(Telemetry.WeatherActivitySourceName);
+        private readonly ActivitySource _activitySource;
         private static readonly string[] Summaries = new[]
         {
             "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
@@ -235,6 +236,7 @@ namespace OpenTelemetryTracingSample
         public WeatherService(ILogger<WeatherService> logger)
         {
             _logger = logger;
+            _activitySource = new ActivitySource(Telemetry.WeatherActivitySourceName);
         }
 
         public async Task<WeatherInfo> GetWeatherAsync(string city)
@@ -304,11 +306,12 @@ namespace OpenTelemetryTracingSample
     public class OrderService : IDisposable
     {
         private readonly ILogger<OrderService> _logger;
-        private readonly ActivitySource _activitySource = new(Telemetry.OrderActivitySourceName);
+        private readonly ActivitySource _activitySource;
 
         public OrderService(ILogger<OrderService> logger)
         {
             _logger = logger;
+            _activitySource = new ActivitySource(Telemetry.OrderActivitySourceName);
         }
 
         public async Task ProcessOrderAsync(Order order)
