@@ -22,7 +22,7 @@ A comprehensive .NET application demonstrating OpenTelemetry logging with struct
 
 1. **Clone the repository**
    ```bash
-   Clone this repository
+   git clone https://github.com/Neelxy/OpenTelemetryLoggingSample.git
    ```
 
 2. **Restore dependencies**

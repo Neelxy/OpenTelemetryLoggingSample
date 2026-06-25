@@ -36,9 +36,6 @@ namespace OpenTelemetryLoggingSample
                                 serviceInstanceId: Environment.MachineName)
                             .AddAttributes(new Dictionary<string, object>
                             {
-                                ["service.name"] = "OpenTelemetryLoggingSample",
-                                ["service.version"] = "1.0.0",
-                                ["service.instance.id"] = Environment.MachineName,
                                 ["service.namespace"] = "demo",
                                 ["deployment.environment"] = "development",
                                 ["deployment.environment.name"] = "development",
@@ -201,7 +198,7 @@ namespace OpenTelemetryLoggingSample
 
         public override void Dispose()
         {
-            _activitySource?.Dispose();
+            _activitySource.Dispose();
             base.Dispose();
         }
     }
