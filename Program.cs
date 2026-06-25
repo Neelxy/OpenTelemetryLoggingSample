@@ -9,7 +9,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace OpenTelemetryLoggingSample
+namespace OpenTelemetryTracingSample
 {
     class Program
     {
@@ -93,9 +93,9 @@ namespace OpenTelemetryLoggingSample
 
     public static class Telemetry
     {
-        public const string ActivitySourceName = "OpenTelemetryLoggingSample.Tracing";
-        public const string WeatherActivitySourceName = "OpenTelemetryLoggingSample.Tracing.Weather";
-        public const string OrderActivitySourceName = "OpenTelemetryLoggingSample.Tracing.Order";
+        public const string ActivitySourceName = "OpenTelemetryTracingSample.Tracing";
+        public const string WeatherActivitySourceName = "OpenTelemetryTracingSample.Tracing.Weather";
+        public const string OrderActivitySourceName = "OpenTelemetryTracingSample.Tracing.Order";
     }
 
     public class TracingBackgroundService : BackgroundService
