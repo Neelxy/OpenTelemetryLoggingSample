@@ -1,14 +1,16 @@
-# OpenTelemetry Tracing Sample
+# OpenTelemetry Logging Sample
 
-A .NET sample that continuously generates distributed traces with OpenTelemetry and exports them to an OTLP endpoint.
+A comprehensive .NET application demonstrating OpenTelemetry logging with structured logs, automatic log generation, and integration with observability platforms like Grafana and Loki.
 
 ## 🚀 Features
 
-- **OpenTelemetry Tracing**: OTLP trace export for local collectors and dashboards
-- **Nested Spans**: End-to-end trace cycles with child spans for weather, ordering, health, and business events
-- **Useful Attributes and Events**: Span tags, status codes, and activity events for richer analysis
-- **Realistic Demo Flow**: Simulated external calls, payment handling, and inventory updates
+- **OpenTelemetry Integration**: Full OTLP (OpenTelemetry Protocol) support
+- **Structured Logging**: Rich, searchable log data with semantic conventions
+- **Continuous Log Generation**: Simulates real-world application scenarios
+- **Multiple Log Levels**: Information, Warning, Error, and Debug logs
+- **Business Scenarios**: Weather API calls, order processing, system metrics
 - **Graceful Shutdown**: Proper handling of Ctrl+C interruption
+- **Dashboard Ready**: Compatible with Grafana, Loki, and other observability tools
 
 ## 🛠️ Quick Start
 
@@ -18,72 +20,78 @@ A .NET sample that continuously generates distributed traces with OpenTelemetry 
 
 ### Setup
 
-1. **Restore dependencies**
+1. **Clone the repository**
+   ```bash
+   Clone this repository
+   ```
+
+2. **Restore dependencies**
    ```bash
    dotnet restore
    ```
 
-2. **Build the application**
+3. **Build the application**
    ```bash
    dotnet build
    ```
 
-3. **Run the application**
+4. **Run the application**
    ```bash
    dotnet run
    ```
 
-The application will begin sending traces to `http://localhost:4318/v1/traces`.
+That's it! The application will start generating logs and sending them to `http://localhost:4318/v1/logs` (OpenTelemetry Collector endpoint).
 
 ### What happens when you run it
 
-- 🚀 Starts a continuous trace producer
-- 🔄 Creates a root span for each simulated processing cycle
-- 🌤️ Generates a child span for a weather request
-- 🛒 Generates nested order-processing spans
-- 💹 Emits spans for system health and business activity
+- 🚀 Starts the logging service
+- 📊 Generates structured logs every 30 seconds
+- 🌤️ Simulates weather API calls
+- 🛒 Processes mock orders
+- 💹 Reports system metrics
+- ⚠️ Occasionally generates warnings and errors
 - ⌨️ Press **Ctrl+C** to stop gracefully
 
 ## 🎯 Configuration
 
 ### Change the OTLP Endpoint
 
-Update `appsettings.json`:
+Edit the endpoint in `Program.cs`:
 
-```json
-"OpenTelemetry": {
-  "Otlp": {
-    "Endpoint": "http://your-collector:4318/v1/traces"
-  }
-}
+```csharp
+otlpOptions.Endpoint = new Uri("http://your-collector:4318/v1/logs");
 ```
 
-### Adjust Trace Frequency
+### Adjust Log Frequency
 
-Modify the delay in the `TracingBackgroundService.ExecuteAsync()` method in `Program.cs`.
+Modify the delay in `LoggingBackgroundService.ExecuteAsync()`:
+
+```csharp
+await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
+```
 
 ## 📦 Dependencies
 
+The project uses these NuGet packages:
 - `OpenTelemetry.Extensions.Hosting`
 - `OpenTelemetry.Exporter.OpenTelemetryProtocol`
 - `Microsoft.Extensions.Hosting`
 
-## 🧪 Sample Trace Shape
+## 🧪 Sample Log Output
 
-Each cycle produces a trace similar to:
+The application generates various types of structured logs:
 
-- `TraceCycle`
-  - `WeatherRequest`
-  - `OrderProcessing`
-    - `ValidateOrder`
-    - `ProcessPayment`
-    - `UpdateInventory`
-  - `SystemHealthCheck`
-  - `BusinessTransaction`
+```
+🌤️ Weather request initiated - City: Tokyo, RequestId: abc123, Environment: development
+🛒 Order processing started - OrderId: 12345, Customer: John Doe, Amount: $99.99
+💹 System metrics recorded - CPU: 45%, Memory: 1024MB, ActiveUsers: 250
+⚠️ Performance warning - Component: DatabaseConnection, ResponseTime: 2500ms
+✅ Logging cycle completed - Cycle: 5, Duration: 1250ms
+```
 
 ## 🔗 Next Steps
 
-To view these traces in a dashboard:
-1. Run an OpenTelemetry Collector at `localhost:4318`
-2. Configure it to forward traces to Tempo, Jaeger, Zipkin, or your preferred backend
-3. Visualize the traces in Grafana or another tracing UI
+To view these logs in a dashboard:
+1. Set up an OpenTelemetry Collector at `localhost:4318`
+2. Configure it to forward logs to Loki, Elasticsearch, or your preferred backend
+3. Create dashboards in Grafana or your visualization tool

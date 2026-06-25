@@ -1,65 +1,69 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry;
+using OpenTelemetry.Logs;
 using OpenTelemetry.Resources;
-using OpenTelemetry.Trace;
-using System;
-using System.Collections.Generic;
 using System.Diagnostics;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Collections.Generic;
 
-namespace OpenTelemetryTracingSample
+namespace OpenTelemetryLoggingSample
 {
     class Program
     {
         static async Task Main(string[] args)
         {
             AppContext.SetSwitch("System.Net.SocketsHttpHandler.Http2UnencryptedSupport", true);
-
             var host = Host.CreateDefaultBuilder(args)
-                .ConfigureServices((context, services) =>
+                .ConfigureServices(services =>
                 {
-                    var openTelemetrySection = context.Configuration.GetSection("OpenTelemetry");
-                    var serviceName = openTelemetrySection["ServiceName"] ?? "OpenTelemetryTracingSample";
-                    var serviceVersion = openTelemetrySection["ServiceVersion"] ?? "1.0.0";
-                    var otlpEndpoint = openTelemetrySection.GetSection("Otlp")["Endpoint"] ?? "http://localhost:4318/v1/traces";
-
                     services.AddSingleton<WeatherService>();
                     services.AddSingleton<OrderService>();
-                    services.AddHostedService<TracingBackgroundService>();
-
-                    services.AddOpenTelemetry()
-                        .ConfigureResource(resource => resource
+                    services.AddHostedService<LoggingBackgroundService>();
+                })
+                .ConfigureLogging((context, logging) =>
+                {
+                    logging.ClearProviders();
+                    logging.AddOpenTelemetry(options =>
+                    {
+                        options.SetResourceBuilder(ResourceBuilder.CreateDefault()
                             .AddService(
-                                serviceName: serviceName,
-                                serviceVersion: serviceVersion,
+                                serviceName: "OpenTelemetryLoggingSample",
+                                serviceVersion: "1.0.0",
                                 serviceInstanceId: Environment.MachineName)
                             .AddAttributes(new Dictionary<string, object>
                             {
+                                ["service.name"] = "OpenTelemetryLoggingSample",
+                                ["service.version"] = "1.0.0",
+                                ["service.instance.id"] = Environment.MachineName,
                                 ["service.namespace"] = "demo",
                                 ["deployment.environment"] = "development",
+                                ["deployment.environment.name"] = "development",
                                 ["host.name"] = Environment.MachineName,
+                                ["host.type"] = "vm",
                                 ["host.arch"] = Environment.Is64BitOperatingSystem ? "amd64" : "x86",
                                 ["process.pid"] = Environment.ProcessId,
+                                ["process.executable.name"] = "OpenTelemetryLoggingSample",
                                 ["process.runtime.name"] = ".NET",
                                 ["process.runtime.version"] = Environment.Version.ToString(),
-                                ["application.name"] = serviceName,
+                                ["os.type"] = Environment.OSVersion.Platform.ToString().ToLower(),
+                                ["os.description"] = Environment.OSVersion.ToString(),
+                                ["application.name"] = "OpenTelemetryLoggingSample",
                                 ["team"] = "development",
                                 ["region"] = "local"
-                            }))
-                        .WithTracing(tracing => tracing
-                            .AddSource(
-                                Telemetry.ActivitySourceName,
-                                Telemetry.WeatherActivitySourceName,
-                                Telemetry.OrderActivitySourceName)
-                            .SetSampler(new AlwaysOnSampler())
-                            .AddOtlpExporter(otlpOptions =>
-                            {
-                                otlpOptions.Endpoint = new Uri(otlpEndpoint);
-                                otlpOptions.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
-                                otlpOptions.TimeoutMilliseconds = 10000;
                             }));
+                        options.AddOtlpExporter(otlpOptions =>
+                        {
+                            otlpOptions.Endpoint = new Uri("http://localhost:4318/v1/logs");
+                            otlpOptions.Protocol = OpenTelemetry.Exporter.OtlpExportProtocol.HttpProtobuf;
+                            otlpOptions.TimeoutMilliseconds = 10000;
+                        });
+                        options.IncludeFormattedMessage = true;
+                        options.IncludeScopes = true;
+                    });
                 })
                 .Build();
 
@@ -73,8 +77,8 @@ namespace OpenTelemetryTracingSample
 
             try
             {
-                Console.WriteLine("🚀 OpenTelemetry Tracing Service Started");
-                Console.WriteLine("📡 Sending continuous traces to OpenTelemetry Collector");
+                Console.WriteLine("🚀 OpenTelemetry Logging Service Started");
+                Console.WriteLine("📡 Sending continuous logs to OpenTelemetry Collector → Loki");
                 Console.WriteLine($"📅 Started at: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
                 Console.WriteLine("⌨️  Press Ctrl+C to stop");
                 Console.WriteLine();
@@ -91,34 +95,27 @@ namespace OpenTelemetryTracingSample
         }
     }
 
-    public static class Telemetry
+    public class LoggingBackgroundService : BackgroundService
     {
-        public const string ActivitySourceName = "OpenTelemetryTracingSample.Tracing";
-        public const string WeatherActivitySourceName = "OpenTelemetryTracingSample.Tracing.Weather";
-        public const string OrderActivitySourceName = "OpenTelemetryTracingSample.Tracing.Order";
-    }
-
-    public class TracingBackgroundService : BackgroundService
-    {
-        private readonly ILogger<TracingBackgroundService> _logger;
+        private readonly ILogger<LoggingBackgroundService> _logger;
         private readonly WeatherService _weatherService;
         private readonly OrderService _orderService;
         private readonly ActivitySource _activitySource;
 
-        public TracingBackgroundService(
-            ILogger<TracingBackgroundService> logger,
+        public LoggingBackgroundService(
+            ILogger<LoggingBackgroundService> logger,
             WeatherService weatherService,
             OrderService orderService)
         {
             _logger = logger;
             _weatherService = weatherService;
             _orderService = orderService;
-            _activitySource = new ActivitySource(Telemetry.ActivitySourceName);
+            _activitySource = new ActivitySource("LoggingBackgroundService");
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _logger.LogInformation("🚀 Continuous tracing service started - Environment: {Environment}, Host: {HostName}",
+            _logger.LogInformation("🚀 Continuous logging service started - Environment: {Environment}, Host: {HostName}",
                 "development", Environment.MachineName);
 
             var cities = new[] { "New York", "London", "Tokyo", "Sydney", "Paris", "Berlin", "Toronto", "Mumbai" };
@@ -132,31 +129,57 @@ namespace OpenTelemetryTracingSample
                 try
                 {
                     cycleCount++;
+                    using var activity = _activitySource.StartActivity($"LoggingCycle_{cycleCount}");
 
-                    using var cycleActivity = _activitySource.StartActivity("TraceCycle", ActivityKind.Internal);
-                    cycleActivity?.SetTag("demo.cycle.number", cycleCount);
-                    cycleActivity?.SetTag("deployment.environment", "development");
-                    cycleActivity?.AddEvent(new ActivityEvent("cycle.started"));
+                    _logger.LogInformation("📊 Logging cycle started - Cycle: {CycleNumber}, Timestamp: {Timestamp}",
+                        cycleCount, DateTime.UtcNow);
 
                     var randomCity = cities[Random.Shared.Next(cities.Length)];
                     await _weatherService.GetWeatherAsync(randomCity);
 
-                    var order = new Order
+                    using (_logger.BeginScope("OrderProcessing_{CycleNumber}_{Timestamp}", cycleCount, DateTime.UtcNow.ToString("yyyyMMdd_HHmmss")))
                     {
-                        Id = Random.Shared.Next(10000, 99999),
-                        CustomerName = customers[Random.Shared.Next(customers.Length)],
-                        Amount = Random.Shared.Next(10, 500),
-                        Items = new[] { items[Random.Shared.Next(items.Length)], items[Random.Shared.Next(items.Length)] }
-                    };
+                        var order = new Order
+                        {
+                            Id = Random.Shared.Next(10000, 99999),
+                            CustomerName = customers[Random.Shared.Next(customers.Length)],
+                            Amount = Random.Shared.Next(10, 500),
+                            Items = new[] { items[Random.Shared.Next(items.Length)], items[Random.Shared.Next(items.Length)] }
+                        };
 
-                    await _orderService.ProcessOrderAsync(order);
-                    await RecordSystemHealthAsync();
-                    await RecordBusinessEventAsync();
+                        await _orderService.ProcessOrderAsync(order);
+                    }
 
-                    cycleActivity?.SetStatus(ActivityStatusCode.Ok);
-                    cycleActivity?.AddEvent(new ActivityEvent("cycle.completed"));
+                    _logger.LogInformation("💹 System metrics recorded - CPU: {CpuUsage}%, Memory: {MemoryUsageMB}MB, ActiveUsers: {ActiveUsers}, Environment: {Environment}, Host: {HostName}",
+                        Random.Shared.Next(10, 90),
+                        Random.Shared.Next(512, 2048),
+                        Random.Shared.Next(50, 500),
+                        "development",
+                        Environment.MachineName);
 
-                    _logger.LogInformation("✅ Trace cycle completed - Cycle: {CycleNumber}", cycleCount);
+                    _logger.LogInformation("🏥 Health check - Status: {HealthStatus}, ResponseTime: {ResponseTimeMs}ms, RequestCount: {RequestCount}",
+                        Random.Shared.NextDouble() > 0.1 ? "healthy" : "degraded",
+                        Random.Shared.Next(50, 500),
+                        Random.Shared.Next(100, 1000));
+
+                    if (Random.Shared.NextDouble() < 0.2)
+                    {
+                        _logger.LogWarning("⚠️ Performance warning - Component: {Component}, Metric: {Metric}, Value: {Value}, Threshold: {Threshold}, Environment: {Environment}",
+                            "DatabaseConnection", "ResponseTime", Random.Shared.Next(1000, 5000), 1000, "development");
+                    }
+
+                    if (Random.Shared.NextDouble() < 0.1)
+                    {
+                        _logger.LogError("❌ Application error - ErrorType: {ErrorType}, Component: {Component}, Duration: {Duration}ms, Environment: {Environment}",
+                            "TimeoutException", "ExternalAPI", Random.Shared.Next(5000, 30000), "development");
+                    }
+
+                    _logger.LogInformation("📈 Business event - EventType: {EventType}, Value: {Value}, Currency: {Currency}, Region: {Region}",
+                        "SaleCompleted", Random.Shared.Next(100, 1000), "USD", "US-EAST");
+
+                    _logger.LogInformation("✅ Logging cycle completed - Cycle: {CycleNumber}, Duration: {Duration}ms",
+                        cycleCount, Random.Shared.Next(1000, 3000));
+
                     await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken);
                 }
                 catch (OperationCanceledException)
@@ -165,66 +188,25 @@ namespace OpenTelemetryTracingSample
                 }
                 catch (Exception ex)
                 {
-                    Activity.Current?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                    Activity.Current?.RecordException(ex);
-
-                    _logger.LogError(ex, "❌ Error in trace cycle - Cycle: {CycleNumber}, Environment: {Environment}",
+                    _logger.LogError(ex, "❌ Error in logging cycle - Cycle: {CycleNumber}, Environment: {Environment}",
                         cycleCount, "development");
 
                     await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
                 }
             }
 
-            _logger.LogInformation("🛑 Continuous tracing service stopped - StopTime: {StopTime}, TotalCycles: {TotalCycles}",
+            _logger.LogInformation("🛑 Continuous logging service stopped - StopTime: {StopTime}, TotalCycles: {TotalCycles}",
                 DateTime.UtcNow, cycleCount);
-        }
-
-        private Task RecordSystemHealthAsync()
-        {
-            using var healthActivity = _activitySource.StartActivity("SystemHealthCheck", ActivityKind.Internal);
-
-            var cpuUsage = Random.Shared.Next(10, 90);
-            var memoryUsage = Random.Shared.Next(512, 2048);
-            var activeUsers = Random.Shared.Next(50, 500);
-
-            healthActivity?.SetTag("system.cpu.usage_percent", cpuUsage);
-            healthActivity?.SetTag("system.memory.usage_mb", memoryUsage);
-            healthActivity?.SetTag("app.active_users", activeUsers);
-            healthActivity?.SetStatus(ActivityStatusCode.Ok);
-
-            _logger.LogInformation("💹 System health span created - CPU: {CpuUsage}%, Memory: {MemoryUsageMB}MB, ActiveUsers: {ActiveUsers}",
-                cpuUsage, memoryUsage, activeUsers);
-
-            return Task.CompletedTask;
-        }
-
-        private Task RecordBusinessEventAsync()
-        {
-            using var businessActivity = _activitySource.StartActivity("BusinessTransaction", ActivityKind.Internal);
-
-            var saleValue = Random.Shared.Next(100, 1000);
-
-            businessActivity?.SetTag("event.type", "SaleCompleted");
-            businessActivity?.SetTag("transaction.amount", saleValue);
-            businessActivity?.SetTag("transaction.currency", "USD");
-            businessActivity?.SetTag("cloud.region", "us-east-1");
-            businessActivity?.AddEvent(new ActivityEvent("business.sale.completed"));
-            businessActivity?.SetStatus(ActivityStatusCode.Ok);
-
-            _logger.LogInformation("📈 Business transaction span created - Value: {Value}, Currency: {Currency}, Region: {Region}",
-                saleValue, "USD", "us-east-1");
-
-            return Task.CompletedTask;
         }
 
         public override void Dispose()
         {
-            _activitySource.Dispose();
+            _activitySource?.Dispose();
             base.Dispose();
         }
     }
 
-    public class WeatherService : IDisposable
+    public class WeatherService
     {
         private readonly ILogger<WeatherService> _logger;
         private readonly ActivitySource _activitySource;
@@ -236,7 +218,7 @@ namespace OpenTelemetryTracingSample
         public WeatherService(ILogger<WeatherService> logger)
         {
             _logger = logger;
-            _activitySource = new ActivitySource(Telemetry.WeatherActivitySourceName);
+            _activitySource = new ActivitySource("WeatherService");
         }
 
         public async Task<WeatherInfo> GetWeatherAsync(string city)
@@ -244,13 +226,12 @@ namespace OpenTelemetryTracingSample
             var stopwatch = Stopwatch.StartNew();
             var requestId = Guid.NewGuid();
 
-            using var activity = _activitySource.StartActivity("WeatherRequest", ActivityKind.Client);
+            using var activity = _activitySource.StartActivity("WeatherRequest");
             activity?.SetTag("weather.city", city);
             activity?.SetTag("request.id", requestId.ToString());
-            activity?.SetTag("server.address", "weather-api.local");
-            activity?.AddEvent(new ActivityEvent("weather.request.started"));
 
-            _logger.LogInformation("🌤️ Weather request started - City: {City}, RequestId: {RequestId}", city, requestId);
+            _logger.LogInformation("🌤️ Weather request initiated - City: {City}, RequestId: {RequestId}, Environment: {Environment}",
+                city, requestId, "development");
 
             try
             {
@@ -263,47 +244,33 @@ namespace OpenTelemetryTracingSample
                     Summary = Summaries[Random.Shared.Next(Summaries.Length)],
                     Timestamp = DateTime.UtcNow
                 };
-
                 stopwatch.Stop();
-
-                activity?.SetTag("weather.temperature", weather.Temperature);
-                activity?.SetTag("weather.condition", weather.Summary);
-                activity?.SetTag("weather.duration_ms", stopwatch.ElapsedMilliseconds);
-                activity?.SetStatus(ActivityStatusCode.Ok);
-                activity?.AddEvent(new ActivityEvent("weather.response.received"));
-
                 _logger.LogInformation(
-                    "✅ Weather trace completed - City: {City}, Temperature: {Temperature}, Condition: {WeatherCondition}, Duration: {DurationMs}ms",
+                    "✅ Weather data retrieved - City: {City}, Temperature: {Temperature}, Condition: {WeatherCondition}, Duration: {DurationMs}ms, RequestId: {RequestId}",
                     weather.City,
                     weather.Temperature,
                     weather.Summary,
-                    stopwatch.ElapsedMilliseconds);
-
+                    stopwatch.ElapsedMilliseconds,
+                    requestId);
+                activity?.SetTag("weather.temperature", weather.Temperature);
+                activity?.SetTag("weather.condition", weather.Summary);
                 return weather;
             }
             catch (Exception ex)
             {
                 stopwatch.Stop();
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.RecordException(ex);
-
                 _logger.LogError(ex,
-                    "❌ Weather request failed - City: {City}, Duration: {DurationMs}ms, RequestId: {RequestId}",
+                    "❌ Weather request failed - City: {City}, Duration: {DurationMs}ms, RequestId: {RequestId}, Environment: {Environment}",
                     city,
                     stopwatch.ElapsedMilliseconds,
-                    requestId);
-
+                    requestId,
+                    "development");
                 throw;
             }
         }
-
-        public void Dispose()
-        {
-            _activitySource.Dispose();
-        }
     }
 
-    public class OrderService : IDisposable
+    public class OrderService
     {
         private readonly ILogger<OrderService> _logger;
         private readonly ActivitySource _activitySource;
@@ -311,26 +278,25 @@ namespace OpenTelemetryTracingSample
         public OrderService(ILogger<OrderService> logger)
         {
             _logger = logger;
-            _activitySource = new ActivitySource(Telemetry.OrderActivitySourceName);
+            _activitySource = new ActivitySource("OrderService");
         }
 
         public async Task ProcessOrderAsync(Order order)
         {
             using var scope = _logger.BeginScope("Order_{OrderId}", order.Id);
-            using var activity = _activitySource.StartActivity("OrderProcessing", ActivityKind.Internal);
+            using var activity = _activitySource.StartActivity("OrderProcessing");
 
             activity?.SetTag("order.id", order.Id.ToString());
             activity?.SetTag("order.customer", order.CustomerName);
             activity?.SetTag("order.amount", order.Amount.ToString("F2"));
-            activity?.SetTag("order.item_count", order.Items?.Length ?? 0);
-            activity?.AddEvent(new ActivityEvent("order.started"));
 
             _logger.LogInformation(
-                "🛒 Order processing started - OrderId: {OrderId}, Customer: {CustomerName}, ItemCount: {ItemCount}, Amount: {Amount}",
+                "🛒 Order processing started - OrderId: {OrderId}, Customer: {CustomerName}, ItemCount: {ItemCount}, Amount: {Amount}, Environment: {Environment}",
                 order.Id,
                 order.CustomerName,
                 order.Items?.Length ?? 0,
-                order.Amount);
+                order.Amount,
+                "development");
 
             try
             {
@@ -338,85 +304,70 @@ namespace OpenTelemetryTracingSample
                 await ProcessPaymentAsync(order);
                 await UpdateInventoryAsync(order);
 
-                activity?.SetTag("order.status", "completed");
-                activity?.SetStatus(ActivityStatusCode.Ok);
-                activity?.AddEvent(new ActivityEvent("order.completed"));
-
-                _logger.LogInformation("✅ Order trace completed - OrderId: {OrderId}, Customer: {CustomerName}, Amount: {Amount}",
+                _logger.LogInformation("✅ Order completed successfully - OrderId: {OrderId}, Customer: {CustomerName}, Amount: {Amount}",
                     order.Id, order.CustomerName, order.Amount);
+
+                activity?.SetTag("order.status", "completed");
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "❌ Order processing failed - OrderId: {OrderId}, Customer: {CustomerName}, Environment: {Environment}",
+                    order.Id, order.CustomerName, "development");
+
                 activity?.SetTag("order.status", "failed");
-                activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
-                activity?.RecordException(ex);
-
-                _logger.LogError(ex, "❌ Order processing failed - OrderId: {OrderId}, Customer: {CustomerName}",
-                    order.Id, order.CustomerName);
-
                 throw;
             }
         }
 
         private async Task ValidateOrderAsync(Order order)
         {
-            using var validationActivity = _activitySource.StartActivity("ValidateOrder", ActivityKind.Internal);
-            validationActivity?.SetTag("order.id", order.Id.ToString());
-
+            _logger.LogDebug("🔍 Order validation started - OrderId: {OrderId}", order.Id);
             await Task.Delay(Random.Shared.Next(50, 150));
 
             if (order.Amount <= 0)
             {
-                validationActivity?.SetStatus(ActivityStatusCode.Error, "Order amount must be positive");
+                _logger.LogWarning("⚠️ Order validation failed - OrderId: {OrderId}, Reason: {Reason}, Amount: {Amount}",
+                    order.Id, "InvalidAmount", order.Amount);
                 throw new InvalidOperationException("Order amount must be positive");
             }
 
-            validationActivity?.SetStatus(ActivityStatusCode.Ok);
+            _logger.LogDebug("✅ Order validation passed - OrderId: {OrderId}", order.Id);
         }
 
         private async Task ProcessPaymentAsync(Order order)
         {
-            using var paymentActivity = _activitySource.StartActivity("ProcessPayment", ActivityKind.Internal);
-            paymentActivity?.SetTag("order.id", order.Id.ToString());
-            paymentActivity?.SetTag("payment.amount", order.Amount.ToString("F2"));
+            _logger.LogInformation("💳 Payment processing started - OrderId: {OrderId}, Amount: {Amount}",
+                order.Id, order.Amount);
 
             await Task.Delay(Random.Shared.Next(200, 800));
 
             if (Random.Shared.NextDouble() < 0.15)
             {
-                var exception = new InvalidOperationException("Payment processing failed");
-                paymentActivity?.SetTag("payment.status", "failed");
-                paymentActivity?.SetStatus(ActivityStatusCode.Error, exception.Message);
-                paymentActivity?.RecordException(exception);
-                throw exception;
+                _logger.LogWarning("⚠️ Payment failed - OrderId: {OrderId}, Reason: {Reason}, Amount: {Amount}, Environment: {Environment}",
+                    order.Id, "InsufficientFunds", order.Amount, "development");
+                throw new InvalidOperationException("Payment processing failed");
             }
 
-            paymentActivity?.SetTag("payment.status", "approved");
-            paymentActivity?.SetStatus(ActivityStatusCode.Ok);
+            _logger.LogInformation("✅ Payment completed - OrderId: {OrderId}, Amount: {Amount}",
+                order.Id, order.Amount);
         }
 
         private async Task UpdateInventoryAsync(Order order)
         {
-            using var inventoryActivity = _activitySource.StartActivity("UpdateInventory", ActivityKind.Internal);
-            inventoryActivity?.SetTag("order.id", order.Id.ToString());
-            inventoryActivity?.SetTag("inventory.item_count", order.Items?.Length ?? 0);
+            _logger.LogInformation("📦 Inventory update started - OrderId: {OrderId}", order.Id);
 
             if (order.Items != null)
             {
                 foreach (var item in order.Items)
                 {
-                    inventoryActivity?.AddEvent(new ActivityEvent("inventory.item.updated",
-                        tags: new ActivityTagsCollection { ["item.name"] = item }));
+                    _logger.LogDebug("📝 Inventory item updated - Item: {Item}, OrderId: {OrderId}",
+                        item, order.Id);
                     await Task.Delay(Random.Shared.Next(30, 100));
                 }
             }
 
-            inventoryActivity?.SetStatus(ActivityStatusCode.Ok);
-        }
-
-        public void Dispose()
-        {
-            _activitySource.Dispose();
+            _logger.LogInformation("✅ Inventory update completed - OrderId: {OrderId}, ItemCount: {ItemCount}",
+                order.Id, order.Items?.Length ?? 0);
         }
     }
 
