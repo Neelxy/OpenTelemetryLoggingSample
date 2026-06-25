@@ -101,7 +101,6 @@ namespace OpenTelemetryLoggingSample
         private readonly ILogger<LoggingBackgroundService> _logger;
         private readonly WeatherService _weatherService;
         private readonly OrderService _orderService;
-        private readonly ActivitySource _activitySource;
 
         public LoggingBackgroundService(
             ILogger<LoggingBackgroundService> logger,
@@ -111,7 +110,6 @@ namespace OpenTelemetryLoggingSample
             _logger = logger;
             _weatherService = weatherService;
             _orderService = orderService;
-            _activitySource = new ActivitySource("LoggingBackgroundService");
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -130,7 +128,6 @@ namespace OpenTelemetryLoggingSample
                 try
                 {
                     cycleCount++;
-                    using var activity = _activitySource.StartActivity($"LoggingCycle_{cycleCount}");
 
                     _logger.LogInformation("📊 Logging cycle started - Cycle: {CycleNumber}, Timestamp: {Timestamp}",
                         cycleCount, DateTime.UtcNow);
@@ -199,18 +196,11 @@ namespace OpenTelemetryLoggingSample
             _logger.LogInformation("🛑 Continuous logging service stopped - StopTime: {StopTime}, TotalCycles: {TotalCycles}",
                 DateTime.UtcNow, cycleCount);
         }
-
-        public override void Dispose()
-        {
-            _activitySource.Dispose();
-            base.Dispose();
-        }
     }
 
     public class WeatherService
     {
         private readonly ILogger<WeatherService> _logger;
-        private readonly ActivitySource _activitySource;
         private static readonly string[] Summaries = new[]
         {
             "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
@@ -219,17 +209,12 @@ namespace OpenTelemetryLoggingSample
         public WeatherService(ILogger<WeatherService> logger)
         {
             _logger = logger;
-            _activitySource = new ActivitySource("WeatherService");
         }
 
         public async Task<WeatherInfo> GetWeatherAsync(string city)
         {
             var stopwatch = Stopwatch.StartNew();
             var requestId = Guid.NewGuid();
-
-            using var activity = _activitySource.StartActivity("WeatherRequest");
-            activity?.SetTag("weather.city", city);
-            activity?.SetTag("request.id", requestId.ToString());
 
             _logger.LogInformation("🌤️ Weather request initiated - City: {City}, RequestId: {RequestId}, Environment: {Environment}",
                 city, requestId, "development");
@@ -246,8 +231,6 @@ namespace OpenTelemetryLoggingSample
                     Timestamp = DateTime.UtcNow
                 };
                 stopwatch.Stop();
-                activity?.SetTag("weather.temperature", weather.Temperature);
-                activity?.SetTag("weather.condition", weather.Summary);
                 _logger.LogInformation(
                     "✅ Weather data retrieved - City: {City}, Temperature: {Temperature}, Condition: {WeatherCondition}, Duration: {DurationMs}ms, RequestId: {RequestId}",
                     weather.City,
@@ -274,22 +257,15 @@ namespace OpenTelemetryLoggingSample
     public class OrderService
     {
         private readonly ILogger<OrderService> _logger;
-        private readonly ActivitySource _activitySource;
 
         public OrderService(ILogger<OrderService> logger)
         {
             _logger = logger;
-            _activitySource = new ActivitySource("OrderService");
         }
 
         public async Task ProcessOrderAsync(Order order)
         {
             using var scope = _logger.BeginScope("Order_{OrderId}", order.Id);
-            using var activity = _activitySource.StartActivity("OrderProcessing");
-
-            activity?.SetTag("order.id", order.Id.ToString());
-            activity?.SetTag("order.customer", order.CustomerName);
-            activity?.SetTag("order.amount", order.Amount.ToString("F2"));
 
             _logger.LogInformation(
                 "🛒 Order processing started - OrderId: {OrderId}, Customer: {CustomerName}, ItemCount: {ItemCount}, Amount: {Amount}, Environment: {Environment}",
@@ -305,7 +281,6 @@ namespace OpenTelemetryLoggingSample
                 await ProcessPaymentAsync(order);
                 await UpdateInventoryAsync(order);
 
-                activity?.SetTag("order.status", "completed");
                 _logger.LogInformation("✅ Order completed successfully - OrderId: {OrderId}, Customer: {CustomerName}, Amount: {Amount}",
                     order.Id, order.CustomerName, order.Amount);
             }
@@ -313,8 +288,6 @@ namespace OpenTelemetryLoggingSample
             {
                 _logger.LogError(ex, "❌ Order processing failed - OrderId: {OrderId}, Customer: {CustomerName}, Environment: {Environment}",
                     order.Id, order.CustomerName, "development");
-
-                activity?.SetTag("order.status", "failed");
                 throw;
             }
         }
